@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   Music,
   Mic,
+  Cloud,
 } from 'lucide-react';
 import { Header } from './components/Header';
 import { VideoPlayer } from './components/VideoPlayer';
@@ -24,9 +25,18 @@ import { VoiceGenerator } from './components/VoiceGenerator';
 import { PresetsModal } from './components/PresetsModal';
 import { ScriptGeneratorModal } from './components/ScriptGeneratorModal';
 import { ExportModal } from './components/ExportModal';
-import { CameraMotion, PresetTemplate, Scene, VideoProject, VideoStyle } from './types';
+import { CloudProjectsModal } from './components/CloudProjectsModal';
+import { CameraMotion, PresetTemplate, Scene, VideoProject, VideoStyle, UserProfile } from './types';
 import { PRESET_TEMPLATES } from './data/presets';
 import { generateKeyframeAPI } from './services/geminiService';
+import {
+  signInWithGoogle,
+  logoutUser,
+  subscribeToAuthChanges,
+  saveProjectToFirestore,
+  loadUserProjectsFromFirestore,
+  deleteProjectFromFirestore,
+} from './services/firebase';
 
 const STORAGE_KEY = 'cineai_current_project';
 const THEME_KEY = 'cineai_current_theme';
@@ -97,6 +107,12 @@ export default function App() {
 
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [cloudProjects, setCloudProjects] = useState<VideoProject[]>([]);
+  const [isCloudModalOpen, setIsCloudModalOpen] = useState<boolean>(false);
+  const [isLoadingCloud, setIsLoadingCloud] = useState<boolean>(false);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+
   const [activeTab, setActiveTab] = useState<'prompt' | 'script' | 'music' | 'voice' | 'image_to_video'>('prompt');
   const [activeSceneIndex, setActiveSceneIndex] = useState<number>(0);
   const [isPresetsOpen, setIsPresetsOpen] = useState<boolean>(false);
@@ -105,23 +121,173 @@ export default function App() {
   const [isGeneratingImage, setIsGeneratingImage] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Auto-save project changes to LocalStorage
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(project));
-    } catch {}
-  }, [project]);
-
   // Show Toast
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
   };
 
+  // Listen to Firebase Auth state
+  useEffect(() => {
+    const unsubscribe = subscribeToAuthChanges(async (currentUser) => {
+      setUser(currentUser);
+      if (currentUser) {
+        fetchCloudProjects(currentUser.uid);
+      } else {
+        setCloudProjects([]);
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Fetch Cloud Projects
+  const fetchCloudProjects = async (uid: string) => {
+    setIsLoadingCloud(true);
+    try {
+      const list = await loadUserProjectsFromFirestore(uid);
+      setCloudProjects(list);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoadingCloud(false);
+    }
+  };
+
+  // Auto-save project changes to LocalStorage and Firebase (if logged in)
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(project));
+    } catch {}
+
+    // Auto-save to cloud if user is logged in
+    if (user?.uid) {
+      const timer = setTimeout(async () => {
+        try {
+          setIsSyncing(true);
+          await saveProjectToFirestore(user.uid, project);
+          // Refresh list quietly
+          const list = await loadUserProjectsFromFirestore(user.uid);
+          setCloudProjects(list);
+        } catch (e) {
+          console.error('Erro na auto-sincronização com Firebase:', e);
+        } finally {
+          setIsSyncing(false);
+        }
+      }, 2000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [project, user?.uid]);
+
   const toggleTheme = () => {
     const nextTheme = theme === 'dark' ? 'light' : 'dark';
     setTheme(nextTheme);
     showToast(`Tema alterado para ${nextTheme === 'light' ? 'Modo Claro' : 'Sophisticated Dark'}`);
+  };
+
+  // Google Sign-in Handler
+  const handleSignIn = async () => {
+    try {
+      showToast('Conectando com o Google...');
+      const profile = await signInWithGoogle();
+      if (profile) {
+        showToast(`Bem-vindo, ${profile.displayName || profile.email}!`);
+        // Save current project immediately to user's Firestore
+        await saveProjectToFirestore(profile.uid, project);
+        fetchCloudProjects(profile.uid);
+      }
+    } catch (err: any) {
+      console.error(err);
+      showToast(err.message || 'Erro ao autenticar com o Google');
+    }
+  };
+
+  // Google Sign-out Handler
+  const handleSignOut = async () => {
+    try {
+      await logoutUser();
+      setUser(null);
+      setCloudProjects([]);
+      showToast('Sessão encerrada com sucesso');
+    } catch (err: any) {
+      console.error(err);
+      showToast('Erro ao encerrar sessão');
+    }
+  };
+
+  // Manual Save to Cloud
+  const handleSaveCurrentProjectToCloud = async () => {
+    if (!user) {
+      handleSignIn();
+      return;
+    }
+    try {
+      setIsSyncing(true);
+      await saveProjectToFirestore(user.uid, project);
+      await fetchCloudProjects(user.uid);
+      showToast('Projeto sincronizado no Firestore com sucesso!');
+    } catch (err: any) {
+      console.error(err);
+      showToast('Erro ao salvar projeto na nuvem');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Load project from cloud
+  const handleSelectCloudProject = (selectedProject: VideoProject) => {
+    setProject(selectedProject);
+    setActiveSceneIndex(0);
+    showToast(`Projeto "${selectedProject.title}" carregado da nuvem!`);
+  };
+
+  // Delete project from cloud
+  const handleDeleteCloudProject = async (projectId: string) => {
+    if (!user) return;
+    try {
+      await deleteProjectFromFirestore(user.uid, projectId);
+      setCloudProjects((prev) => prev.filter((p) => p.id !== projectId));
+      showToast('Projeto removido do Firestore');
+    } catch (err) {
+      console.error(err);
+      showToast('Erro ao remover projeto da nuvem');
+    }
+  };
+
+  // New Blank Project
+  const handleNewProject = () => {
+    const newProj: VideoProject = {
+      id: 'proj_' + Date.now(),
+      title: 'Novo Projeto CineAI',
+      description: 'Projeto de vídeo gerado com inteligência artificial.',
+      aspectRatio: '16:9',
+      style: 'cinematic',
+      fps: 30,
+      resolution: '1080p',
+      soundtrack: 'cinematic_epic',
+      enableVoiceover: true,
+      voiceGender: 'pt-BR-female',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      scenes: [
+        {
+          id: 'sc_' + Date.now(),
+          title: 'Primeiro Take',
+          duration: 4,
+          visualPrompt: 'Cena cinematográfica com iluminação dramática e riqueza de detalhes.',
+          cameraMotion: 'pan_left',
+          atmosphereEffect: 'particles',
+          transition: 'crossfade',
+          narration: 'Apresentando a nova visão cinematográfica.',
+          subtitle: 'INÍCIO DO FILME',
+          moodColor: '#0b112c',
+        },
+      ],
+    };
+    setProject(newProj);
+    setActiveSceneIndex(0);
+    showToast('Novo projeto criado!');
   };
 
   // Update Project state
@@ -257,9 +423,14 @@ export default function App() {
         onOpenPresets={() => setIsPresetsOpen(true)}
         onOpenExport={() => setIsExportOpen(true)}
         onOpenScriptGenerator={() => setIsScriptGenOpen(true)}
+        onOpenCloudProjects={() => setIsCloudModalOpen(true)}
         isExporting={false}
         theme={theme}
         onToggleTheme={toggleTheme}
+        user={user}
+        onSignIn={handleSignIn}
+        onSignOut={handleSignOut}
+        isSyncing={isSyncing}
       />
 
       {/* Main Studio Workspace */}
@@ -416,6 +587,21 @@ export default function App() {
         </div>
       )}
 
+      {/* Cloud Projects Modal */}
+      <CloudProjectsModal
+        isOpen={isCloudModalOpen}
+        onClose={() => setIsCloudModalOpen(false)}
+        user={user}
+        currentProject={project}
+        cloudProjects={cloudProjects}
+        isLoading={isLoadingCloud}
+        onSelectProject={handleSelectCloudProject}
+        onSaveCurrentProject={handleSaveCurrentProjectToCloud}
+        onDeleteProject={handleDeleteCloudProject}
+        onNewProject={handleNewProject}
+        onSignIn={handleSignIn}
+      />
+
       {/* Modals */}
       <PresetsModal
         isOpen={isPresetsOpen}
@@ -439,3 +625,4 @@ export default function App() {
     </div>
   );
 }
+
