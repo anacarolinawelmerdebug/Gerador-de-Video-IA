@@ -271,6 +271,54 @@ class SoundSynthesizer {
     } catch {}
   }
 
+  private customAudioEl: HTMLAudioElement | null = null;
+  private customVoiceEl: HTMLAudioElement | null = null;
+
+  public playCustomAudio(url: string, volume: number = 0.6, loop: boolean = true) {
+    this.stopSoundtrack();
+    this.stopCustomAudio();
+
+    if (!url) return;
+    try {
+      this.customAudioEl = new Audio(url);
+      this.customAudioEl.volume = volume;
+      this.customAudioEl.loop = loop;
+      this.customAudioEl.play().catch(() => {});
+    } catch {}
+  }
+
+  public stopCustomAudio() {
+    if (this.customAudioEl) {
+      try {
+        this.customAudioEl.pause();
+        this.customAudioEl.currentTime = 0;
+      } catch {}
+      this.customAudioEl = null;
+    }
+  }
+
+  public playVoiceAudio(url: string, volume: number = 0.9) {
+    this.stopVoiceAudio();
+    this.stopNarration();
+
+    if (!url) return;
+    try {
+      this.customVoiceEl = new Audio(url);
+      this.customVoiceEl.volume = volume;
+      this.customVoiceEl.play().catch(() => {});
+    } catch {}
+  }
+
+  public stopVoiceAudio() {
+    if (this.customVoiceEl) {
+      try {
+        this.customVoiceEl.pause();
+        this.customVoiceEl.currentTime = 0;
+      } catch {}
+      this.customVoiceEl = null;
+    }
+  }
+
   // Voiceover narration using Web Speech API
   public speakNarration(text: string, voiceGender: string = 'pt-BR-female') {
     if (!('speechSynthesis' in window) || !text) return;

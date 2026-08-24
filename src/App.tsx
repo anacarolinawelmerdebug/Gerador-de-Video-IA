@@ -11,12 +11,16 @@ import {
   RotateCcw,
   Sliders,
   CheckCircle2,
+  Music,
+  Mic,
 } from 'lucide-react';
 import { Header } from './components/Header';
 import { VideoPlayer } from './components/VideoPlayer';
 import { PromptDirector } from './components/PromptDirector';
 import { ScriptStudio } from './components/ScriptStudio';
 import { ImageToVideo } from './components/ImageToVideo';
+import { MusicGenerator } from './components/MusicGenerator';
+import { VoiceGenerator } from './components/VoiceGenerator';
 import { PresetsModal } from './components/PresetsModal';
 import { ScriptGeneratorModal } from './components/ScriptGeneratorModal';
 import { ExportModal } from './components/ExportModal';
@@ -25,6 +29,7 @@ import { PRESET_TEMPLATES } from './data/presets';
 import { generateKeyframeAPI } from './services/geminiService';
 
 const STORAGE_KEY = 'cineai_current_project';
+const THEME_KEY = 'cineai_current_theme';
 
 const DEFAULT_PROJECT: VideoProject = {
   id: 'proj_default',
@@ -90,7 +95,9 @@ export default function App() {
     return DEFAULT_PROJECT;
   });
 
-  const [activeTab, setActiveTab] = useState<'prompt' | 'script' | 'image_to_video'>('prompt');
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+
+  const [activeTab, setActiveTab] = useState<'prompt' | 'script' | 'music' | 'voice' | 'image_to_video'>('prompt');
   const [activeSceneIndex, setActiveSceneIndex] = useState<number>(0);
   const [isPresetsOpen, setIsPresetsOpen] = useState<boolean>(false);
   const [isScriptGenOpen, setIsScriptGenOpen] = useState<boolean>(false);
@@ -111,11 +118,26 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
+  const toggleTheme = () => {
+    const nextTheme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(nextTheme);
+    showToast(`Tema alterado para ${nextTheme === 'light' ? 'Modo Claro' : 'Sophisticated Dark'}`);
+  };
+
   // Update Project state
   const handleUpdateProject = (updated: Partial<VideoProject>) => {
     setProject((prev) => ({
       ...prev,
       ...updated,
+      updatedAt: new Date().toISOString(),
+    }));
+  };
+
+  // Update single scene in project
+  const handleUpdateScene = (sceneId: string, updated: Partial<Scene>) => {
+    setProject((prev) => ({
+      ...prev,
+      scenes: prev.scenes.map((s) => (s.id === sceneId ? { ...s, ...updated } : s)),
       updatedAt: new Date().toISOString(),
     }));
   };
@@ -223,7 +245,11 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-sky-500 selection:text-white">
+    <div className={`min-h-screen flex flex-col font-sans transition-colors ${
+      theme === 'light'
+        ? 'bg-slate-50 text-slate-900 selection:bg-indigo-500 selection:text-white'
+        : 'bg-slate-950 text-slate-100 selection:bg-sky-500 selection:text-white'
+    }`}>
       {/* Studio Top Navigation */}
       <Header
         project={project}
@@ -232,6 +258,8 @@ export default function App() {
         onOpenExport={() => setIsExportOpen(true)}
         onOpenScriptGenerator={() => setIsScriptGenOpen(true)}
         isExporting={false}
+        theme={theme}
+        onToggleTheme={toggleTheme}
       />
 
       {/* Main Studio Workspace */}
@@ -250,44 +278,87 @@ export default function App() {
         {/* Right Column: Creative Tools & Studio Editors (7 cols on lg) */}
         <div className="lg:col-span-7 flex flex-col gap-4">
           {/* Workspace Mode Tabs */}
-          <div className="flex items-center gap-1.5 bg-slate-900/90 border border-slate-800 p-1 rounded-xl shadow-sm">
+          <div className={`flex items-center gap-1 p-1 rounded-xl shadow-sm border overflow-x-auto ${
+            theme === 'light' ? 'bg-white border-slate-200' : 'bg-slate-900/90 border-slate-800'
+          }`}>
             <button
               id="tab-prompt-btn"
               onClick={() => setActiveTab('prompt')}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-bold transition-all ${
+              className={`flex-1 min-w-[110px] flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-lg text-xs font-bold transition-all ${
                 activeTab === 'prompt'
                   ? 'bg-sky-500 text-white shadow-md shadow-sky-500/20'
+                  : theme === 'light'
+                  ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
               }`}
             >
               <Wand2 className="w-3.5 h-3.5" />
-              <span>Prompt & Estilos IA</span>
+              <span>Prompt & Estilo</span>
             </button>
 
             <button
               id="tab-script-btn"
               onClick={() => setActiveTab('script')}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-bold transition-all ${
+              className={`flex-1 min-w-[100px] flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-lg text-xs font-bold transition-all ${
                 activeTab === 'script'
                   ? 'bg-sky-500 text-white shadow-md shadow-sky-500/20'
+                  : theme === 'light'
+                  ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
               }`}
             >
               <Layers className="w-3.5 h-3.5" />
-              <span>Cenas & Takes ({project.scenes.length})</span>
+              <span>Cenas ({project.scenes.length})</span>
+            </button>
+
+            {/* Music Generator Tab */}
+            <button
+              id="tab-music-btn"
+              onClick={() => setActiveTab('music')}
+              className={`flex-1 min-w-[110px] flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-lg text-xs font-bold transition-all ${
+                activeTab === 'music'
+                  ? 'bg-rose-500 text-white shadow-md shadow-rose-500/20'
+                  : theme === 'light'
+                  ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+              }`}
+            >
+              <Music className="w-3.5 h-3.5" />
+              <span>Música IA</span>
+              {project.customAudioUrl && (
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" title="Trilha personalizada ativa" />
+              )}
+            </button>
+
+            {/* Voice & TTS Generator Tab */}
+            <button
+              id="tab-voice-btn"
+              onClick={() => setActiveTab('voice')}
+              className={`flex-1 min-w-[110px] flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-lg text-xs font-bold transition-all ${
+                activeTab === 'voice'
+                  ? 'bg-indigo-500 text-white shadow-md shadow-indigo-500/20'
+                  : theme === 'light'
+                  ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+              }`}
+            >
+              <Mic className="w-3.5 h-3.5" />
+              <span>Voz & Locução</span>
             </button>
 
             <button
               id="tab-image-video-btn"
               onClick={() => setActiveTab('image_to_video')}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-bold transition-all ${
+              className={`flex-1 min-w-[110px] flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-lg text-xs font-bold transition-all ${
                 activeTab === 'image_to_video'
                   ? 'bg-sky-500 text-white shadow-md shadow-sky-500/20'
+                  : theme === 'light'
+                  ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
               }`}
             >
               <ImageIcon className="w-3.5 h-3.5" />
-              <span>Foto para Vídeo</span>
+              <span>Foto p/ Vídeo</span>
             </button>
           </div>
 
@@ -311,6 +382,23 @@ export default function App() {
             />
           )}
 
+          {activeTab === 'music' && (
+            <MusicGenerator
+              project={project}
+              onUpdateProject={handleUpdateProject}
+              onShowToast={showToast}
+            />
+          )}
+
+          {activeTab === 'voice' && (
+            <VoiceGenerator
+              project={project}
+              onUpdateProject={handleUpdateProject}
+              onUpdateScene={handleUpdateScene}
+              onShowToast={showToast}
+            />
+          )}
+
           {activeTab === 'image_to_video' && (
             <ImageToVideo
               onAddGeneratedScene={handleAddGeneratedScene}
@@ -322,7 +410,7 @@ export default function App() {
 
       {/* Floating Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 border border-sky-500/40 text-slate-100 text-xs px-4 py-2.5 rounded-xl shadow-2xl flex items-center gap-2 animate-in slide-in-from-bottom-2 duration-150 backdrop-blur-md">
+        <div className="fixed bottom-6 right-6 z-50 bg-slate-900/95 border border-sky-500/40 text-slate-100 text-xs px-4 py-2.5 rounded-xl shadow-2xl flex items-center gap-2 animate-in slide-in-from-bottom-2 duration-150 backdrop-blur-md">
           <CheckCircle2 className="w-4 h-4 text-sky-400 flex-shrink-0" />
           <span>{toastMessage}</span>
         </div>

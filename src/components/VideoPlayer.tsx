@@ -138,8 +138,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     }
 
     // Start background soundtrack if not muted
-    if (!isMuted && project.soundtrack !== 'none') {
-      soundSynth.playSoundtrack(project.soundtrack);
+    if (!isMuted) {
+      if (project.customAudioUrl) {
+        soundSynth.playCustomAudio(project.customAudioUrl, 0.65, true);
+      } else if (project.soundtrack !== 'none') {
+        soundSynth.playSoundtrack(project.soundtrack);
+      }
     }
 
     lastTimeRef.current = performance.now();
@@ -164,7 +168,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           currentSceneInfo.index !== lastSpokenSceneRef.current
         ) {
           lastSpokenSceneRef.current = currentSceneInfo.index;
-          if (currentSceneInfo.scene?.narration) {
+          if (currentSceneInfo.scene?.voiceAudioUrl) {
+            soundSynth.playVoiceAudio(currentSceneInfo.scene.voiceAudioUrl, 0.95);
+          } else if (currentSceneInfo.scene?.narration) {
             soundSynth.speakNarration(
               currentSceneInfo.scene.narration,
               project.voiceGender
@@ -185,9 +191,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         cancelAnimationFrame(animationFrameRef.current);
       }
       soundSynth.stopSoundtrack();
+      soundSynth.stopCustomAudio();
+      soundSynth.stopVoiceAudio();
       soundSynth.stopNarration();
     };
-  }, [isPlaying, playbackSpeed, totalDuration, isMuted, project.soundtrack, project.enableVoiceover, project.voiceGender, getSceneAtTime, renderCurrentState]);
+  }, [isPlaying, playbackSpeed, totalDuration, isMuted, project.soundtrack, project.customAudioUrl, project.enableVoiceover, project.voiceGender, getSceneAtTime, renderCurrentState]);
 
   // Sync canvas render when currentTime or scenes change while paused
   useEffect(() => {

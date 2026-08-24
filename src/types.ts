@@ -58,6 +58,36 @@ export interface Scene {
   subtitle?: string;
   moodColor?: string;
   cameraSpeed?: number; // 0.5 to 2.0
+  voiceAudioUrl?: string; // Custom generated TTS audio for this specific scene
+}
+
+export interface GeneratedMusicTrack {
+  id: string;
+  title: string;
+  prompt: string;
+  genre: string;
+  tempo: string;
+  duration: number;
+  audioUrl: string;
+  mimeType: string;
+  lyrics?: string;
+  model: 'lyria-3-clip-preview' | 'lyria-3-pro-preview' | string;
+  createdAt: string;
+  isApplied?: boolean;
+}
+
+export interface GeneratedVoiceTrack {
+  id: string;
+  text: string;
+  voiceName: string;
+  language: string;
+  speed: number;
+  pitch: number;
+  emotion: string;
+  audioUrl: string;
+  source: string;
+  createdAt: string;
+  targetSceneIndex?: number;
 }
 
 export interface VideoProject {
@@ -69,6 +99,8 @@ export interface VideoProject {
   fps: number; // 24, 30, 60
   resolution: '720p' | '1080p';
   soundtrack: SoundtrackMood;
+  customAudioUrl?: string; // Custom Lyria generated music track
+  customAudioTitle?: string;
   enableVoiceover: boolean;
   voiceGender: 'pt-BR-female' | 'pt-BR-male' | 'en-US';
   scenes: Scene[];

@@ -218,24 +218,46 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
           {/* Soundtrack selector */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-slate-300 flex items-center gap-1">
-              <Music className="w-3.5 h-3.5 text-amber-400" />
-              Trilha Sonora Adaptativa
-            </label>
-            <select
-              value={soundtrack}
-              onChange={(e) => setSoundtrack(e.target.value as SoundtrackMood)}
-              disabled={isExporting}
-              className="w-full bg-slate-950 border border-slate-800 text-xs text-slate-200 rounded-lg p-2.5 outline-none focus:border-sky-500 capitalize"
-            >
-              <option value="cinematic_epic">Cinematográfica Épica (Swells & Sub Bass)</option>
-              <option value="cyber_ambient">Cyber Ambient Neo-Tokyo</option>
-              <option value="peaceful_nature">Santuário da Natureza</option>
-              <option value="retro_synth">Retro Synthwave 80s</option>
-              <option value="lofi_chill">Lo-Fi Chill Beats</option>
-              <option value="tension_drone">Suspense & Drone Pesado</option>
-              <option value="none">Sem Trilha Sonora</option>
-            </select>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-slate-300 flex items-center gap-1">
+                <Music className="w-3.5 h-3.5 text-amber-400" />
+                Trilha Sonora
+              </label>
+              {project.customAudioUrl && (
+                <span className="text-[10px] text-rose-400 font-medium bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20">
+                  Lyria 3 Ativo
+                </span>
+              )}
+            </div>
+            {project.customAudioUrl ? (
+              <div className="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs text-rose-200">
+                  <Music className="w-3.5 h-3.5 text-rose-400" />
+                  <span className="font-semibold truncate max-w-[200px]">{project.customAudioTitle || 'Trilha Gerada com Google Lyria'}</span>
+                </div>
+                <button
+                  onClick={() => onUpdateProject({ customAudioUrl: undefined, customAudioTitle: undefined, soundtrack: 'cinematic_epic' })}
+                  className="text-[10px] text-slate-400 hover:text-slate-200 underline"
+                >
+                  Usar Trilha Sintética
+                </button>
+              </div>
+            ) : (
+              <select
+                value={soundtrack}
+                onChange={(e) => setSoundtrack(e.target.value as SoundtrackMood)}
+                disabled={isExporting}
+                className="w-full bg-slate-950 border border-slate-800 text-xs text-slate-200 rounded-lg p-2.5 outline-none focus:border-sky-500 capitalize"
+              >
+                <option value="cinematic_epic">Cinematográfica Épica (Swells & Sub Bass)</option>
+                <option value="cyber_ambient">Cyber Ambient Neo-Tokyo</option>
+                <option value="peaceful_nature">Santuário da Natureza</option>
+                <option value="retro_synth">Retro Synthwave 80s</option>
+                <option value="lofi_chill">Lo-Fi Chill Beats</option>
+                <option value="tension_drone">Suspense & Drone Pesado</option>
+                <option value="none">Sem Trilha Sonora</option>
+              </select>
+            )}
           </div>
 
           {/* Voiceover configuration */}
