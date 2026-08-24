@@ -1,0 +1,6 @@
+{
+  "name": "Gerador de Vídeo IA",
+  "description": "Aplicativo avançado para criação e geração de vídeos com Inteligência Artificial, roteiros, storyboards e animação cinematográfica.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

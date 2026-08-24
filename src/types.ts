@@ -1,0 +1,101 @@
+export type AspectRatio = '16:9' | '9:16' | '1:1' | '4:3';
+
+export type VideoStyle =
+  | 'cinematic'
+  | 'cyberpunk'
+  | 'anime'
+  | '3d_animation'
+  | 'documentary'
+  | 'vintage_vhs'
+  | 'synthwave'
+  | 'fantasy'
+  | 'minimal_motion';
+
+export type CameraMotion =
+  | 'pan_left'
+  | 'pan_right'
+  | 'zoom_in'
+  | 'zoom_out'
+  | 'drone_flythrough'
+  | 'orbit_360'
+  | 'tilt_up'
+  | 'tilt_down'
+  | 'slow_motion'
+  | 'static';
+
+export type AtmosphereEffect =
+  | 'particles'
+  | 'rain'
+  | 'dust_motes'
+  | 'lens_flare'
+  | 'cyber_grid'
+  | 'film_grain'
+  | 'bokeh'
+  | 'fog'
+  | 'none';
+
+export type TransitionType = 'crossfade' | 'wipe_left' | 'zoom_blur' | 'glitch' | 'fade_black';
+
+export type SoundtrackMood =
+  | 'cinematic_epic'
+  | 'cyber_ambient'
+  | 'peaceful_nature'
+  | 'retro_synth'
+  | 'lofi_chill'
+  | 'tension_drone'
+  | 'none';
+
+export interface Scene {
+  id: string;
+  title: string;
+  duration: number; // in seconds (e.g. 3, 4, 5)
+  visualPrompt: string;
+  imageUrl?: string;
+  cameraMotion: CameraMotion;
+  atmosphereEffect: AtmosphereEffect;
+  transition: TransitionType;
+  narration?: string;
+  subtitle?: string;
+  moodColor?: string;
+  cameraSpeed?: number; // 0.5 to 2.0
+}
+
+export interface VideoProject {
+  id: string;
+  title: string;
+  description: string;
+  aspectRatio: AspectRatio;
+  style: VideoStyle;
+  fps: number; // 24, 30, 60
+  resolution: '720p' | '1080p';
+  soundtrack: SoundtrackMood;
+  enableVoiceover: boolean;
+  voiceGender: 'pt-BR-female' | 'pt-BR-male' | 'en-US';
+  scenes: Scene[];
+  createdAt: string;
+  updatedAt: string;
+  veoOperationName?: string;
+  isVeoRendered?: boolean;
+  renderedVideoUrl?: string;
+}
+
+export interface EnhancedPromptResult {
+  enhancedPrompt: string;
+  cameraDirection: string;
+  lightingAndColor: string;
+  soundAtmosphere: string;
+  suggestedMusicTempo: string;
+  visualTags: string[];
+}
+
+export interface PresetTemplate {
+  id: string;
+  name: string;
+  description: string;
+  badge: string;
+  category: 'cinema' | 'commercial' | 'social' | 'animation';
+  style: VideoStyle;
+  aspectRatio: AspectRatio;
+  soundtrack: SoundtrackMood;
+  scenes: Omit<Scene, 'id'>[];
+}
