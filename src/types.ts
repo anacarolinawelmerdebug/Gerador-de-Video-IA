@@ -1,6 +1,7 @@
 export type AspectRatio = '16:9' | '9:16' | '1:1' | '4:3';
 
 export type VideoStyle =
+  | 'photorealistic'
   | 'cinematic'
   | 'cyberpunk'
   | 'anime'
@@ -90,6 +91,34 @@ export interface GeneratedVoiceTrack {
   targetSceneIndex?: number;
 }
 
+export type ColorGradingPreset =
+  | 'none'
+  | 'teal_orange'
+  | 'warm_vintage'
+  | 'cyber_neon'
+  | 'bleach_bypass'
+  | 'noir_bw'
+  | 'golden_hour'
+  | 'kodachrome'
+  | 'scifi_matrix';
+
+export interface PostProcessingFilters {
+  enabled: boolean;
+  filmGrain: number; // 0 to 100
+  grainSize: 'fine' | 'medium' | 'coarse';
+  chromaticAberration: number; // 0 to 15 (px RGB offset)
+  vignette: number; // 0 to 100
+  vignetteFeather: number; // 20 to 100
+  bloomGlow: number; // 0 to 100 (Black Pro-Mist / Halation diffusion)
+  contrast: number; // 70 to 140 (default 100)
+  saturation: number; // 0 to 180 (default 100)
+  brightness: number; // 70 to 130 (default 100)
+  colorGrading: ColorGradingPreset;
+  scanlines: number; // 0 to 100 (CRT retro scanlines)
+  sharpen: number; // 0 to 100 (AI detail boost)
+  lensDistortion: number; // 0 to 50 (anamorphic lens curvature)
+}
+
 export interface VideoProject {
   id: string;
   title: string;
@@ -109,6 +138,7 @@ export interface VideoProject {
   veoOperationName?: string;
   isVeoRendered?: boolean;
   renderedVideoUrl?: string;
+  postProcessing?: PostProcessingFilters;
 }
 
 export interface EnhancedPromptResult {
@@ -139,5 +169,27 @@ export interface UserProfile {
   photoURL: string | null;
   createdAt?: string;
   lastLoginAt?: string;
+}
+
+export type NavigationView = 'home' | 'studio' | 'my_gallery' | 'inspiration';
+
+export interface InspirationItem {
+  id: string;
+  title: string;
+  creator: string;
+  avatarUrl?: string;
+  category: 'cinema' | 'commercial' | 'social' | 'animation' | 'scifi' | 'nature' | 'retro';
+  style: VideoStyle;
+  aspectRatio: AspectRatio;
+  duration: number;
+  description: string;
+  tags: string[];
+  likesCount: number;
+  viewsCount: number;
+  featured?: boolean;
+  soundtrack: SoundtrackMood;
+  scenes: Omit<Scene, 'id'>[];
+  coverImageUrl?: string;
+  colorPalette?: string[];
 }
 

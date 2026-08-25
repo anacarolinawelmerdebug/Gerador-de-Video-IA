@@ -13,10 +13,18 @@ import {
   Gauge,
   Music,
   Camera,
+  Sliders,
+  Columns,
+  Eye,
+  EyeOff,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
-import { Scene, VideoProject } from '../types';
+import { PostProcessingFilters, Scene, VideoProject } from '../types';
 import { videoRenderer } from '../utils/videoRenderer';
 import { soundSynth } from '../utils/audioSynth';
+import { PostProcessingPanel } from './PostProcessingPanel';
+import { CLEAN_POST_PROCESSING, DEFAULT_POST_PROCESSING } from '../data/filterPresets';
 
 interface VideoPlayerProps {
   project: VideoProject;
@@ -24,6 +32,8 @@ interface VideoPlayerProps {
   onSelectScene: (index: number) => void;
   onGenerateSceneImage?: (sceneIndex: number) => void;
   isGeneratingImage?: boolean;
+  onUpdateProject?: (updated: Partial<VideoProject>) => void;
+  theme?: 'dark' | 'light';
 }
 
 export const VideoPlayer: React.FC<VideoPlayerProps> = ({
@@ -32,6 +42,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   onSelectScene,
   onGenerateSceneImage,
   isGeneratingImage = false,
+  onUpdateProject,
+  theme = 'dark',
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -41,6 +53,23 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+
+  // Post-Processing Filters state
+  const [isPostProcessingOpen, setIsPostProcessingOpen] = useState<boolean>(false);
+  const [isSplitScreen, setIsSplitScreen] = useState<boolean>(false);
+  const [splitPosition, setSplitPosition] = useState<number>(0.5);
+  const [isHoldingCompare, setIsHoldingCompare] = useState<boolean>(false);
+
+  const [localFilters, setLocalFilters] = useState<PostProcessingFilters>(
+    project.postProcessing || DEFAULT_POST_PROCESSING
+  );
+
+  // Keep local filters synced if project changes
+  useEffect(() => {
+    if (project.postProcessing) {
+      setLocalFilters(project.postProcessing);
+    }
+  }, [project.postProcessing]);
 
   const animationFrameRef = useRef<number | null>(null);
   const lastTimeRef = useRef<number>(0);
@@ -87,6 +116,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     [project.scenes]
   );
 
+  // Active filters to render
+  const effectiveFilters = isHoldingCompare
+    ? CLEAN_POST_PROCESSING
+    : (project.postProcessing || localFilters);
+
   // Render loop
   const renderCurrentState = useCallback(() => {
     const canvas = canvasRef.current;
@@ -126,9 +160,20 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       sceneProgress,
       currentTime / totalDuration,
       nextScene,
-      transitionProgress
+      transitionProgress,
+      effectiveFilters,
+      isSplitScreen ? splitPosition : null
     );
-  }, [currentTime, getSceneAtTime, project.aspectRatio, project.scenes, totalDuration]);
+  }, [
+    currentTime,
+    getSceneAtTime,
+    project.aspectRatio,
+    project.scenes,
+    totalDuration,
+    effectiveFilters,
+    isSplitScreen,
+    splitPosition,
+  ]);
 
   // Main animation tick
   useEffect(() => {
@@ -195,12 +240,31 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       soundSynth.stopVoiceAudio();
       soundSynth.stopNarration();
     };
-  }, [isPlaying, playbackSpeed, totalDuration, isMuted, project.soundtrack, project.customAudioUrl, project.enableVoiceover, project.voiceGender, getSceneAtTime, renderCurrentState]);
+  }, [
+    isPlaying,
+    playbackSpeed,
+    totalDuration,
+    isMuted,
+    project.soundtrack,
+    project.customAudioUrl,
+    project.enableVoiceover,
+    project.voiceGender,
+    getSceneAtTime,
+    renderCurrentState,
+  ]);
 
   // Sync canvas render when currentTime or scenes change while paused
   useEffect(() => {
     renderCurrentState();
-  }, [currentTime, renderCurrentState]);
+  }, [currentTime, renderCurrentState, effectiveFilters, isSplitScreen, splitPosition]);
+
+  // Handle filter changes
+  const handleFiltersChange = (newFilters: PostProcessingFilters) => {
+    setLocalFilters(newFilters);
+    if (onUpdateProject) {
+      onUpdateProject({ postProcessing: newFilters });
+    }
+  };
 
   // Play / Pause Toggle
   const togglePlay = () => {
@@ -248,6 +312,17 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
   const currentSceneInfo = getSceneAtTime(currentTime);
 
+  // Count active FX
+  const activeFxCount = [
+    localFilters.filmGrain > 0,
+    localFilters.chromaticAberration > 0,
+    localFilters.vignette > 0,
+    localFilters.bloomGlow > 0,
+    localFilters.colorGrading !== 'none',
+    localFilters.scanlines > 0,
+    localFilters.sharpen > 0,
+  ].filter(Boolean).length;
+
   // Aspect ratio container styles
   const getAspectRatioClasses = () => {
     switch (project.aspectRatio) {
@@ -265,211 +340,287 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   };
 
   return (
-    <div
-      ref={containerRef}
-      className="bg-slate-900/80 border border-slate-800/80 rounded-2xl p-4 lg:p-5 flex flex-col gap-4 shadow-xl backdrop-blur-sm relative overflow-hidden"
-    >
-      {/* Top Player Bar: Scene Info & Visual Tag */}
-      <div className="flex items-center justify-between text-xs">
-        <div className="flex items-center gap-2">
-          <span className="font-semibold text-slate-200">
-            Cena {currentSceneInfo.index + 1} de {project.scenes.length}:
-          </span>
-          <span className="text-sky-400 font-medium truncate max-w-[220px]">
-            {currentSceneInfo.scene?.title || 'Take'}
-          </span>
-          <span className="px-2 py-0.5 rounded-full text-[10px] uppercase font-bold bg-slate-800 text-slate-400 border border-slate-700">
-            {currentSceneInfo.scene?.cameraMotion.replace('_', ' ')}
-          </span>
-        </div>
+    <div className="flex flex-col gap-4">
+      <div
+        ref={containerRef}
+        className="bg-slate-900/80 border border-slate-800/80 rounded-2xl p-4 lg:p-5 flex flex-col gap-4 shadow-xl backdrop-blur-sm relative overflow-hidden"
+      >
+        {/* Top Player Bar: Scene Info & FX Quick Badge */}
+        <div className="flex items-center justify-between text-xs gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="font-semibold text-slate-200 shrink-0">
+              Cena {currentSceneInfo.index + 1} de {project.scenes.length}:
+            </span>
+            <span className="text-sky-400 font-medium truncate max-w-[180px]">
+              {currentSceneInfo.scene?.title || 'Take'}
+            </span>
+            <span className="hidden sm:inline-flex px-2 py-0.5 rounded-full text-[10px] uppercase font-bold bg-slate-800 text-slate-400 border border-slate-700 shrink-0">
+              {currentSceneInfo.scene?.cameraMotion.replace('_', ' ')}
+            </span>
+          </div>
 
-        <div className="flex items-center gap-2">
-          {onGenerateSceneImage && (
+          <div className="flex items-center gap-1.5 shrink-0">
+            {/* Quick Post-Processing Toggle & Expand Button */}
             <button
-              id="generate-current-frame-btn"
-              onClick={() => onGenerateSceneImage(currentSceneInfo.index)}
-              disabled={isGeneratingImage}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-all disabled:opacity-50"
-              title="Gerar visual de cena com IA"
+              id="open-post-processing-panel-btn"
+              onClick={() => setIsPostProcessingOpen(!isPostProcessingOpen)}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all border ${
+                isPostProcessingOpen
+                  ? 'bg-sky-500 text-white border-sky-400 shadow-md shadow-sky-500/25'
+                  : localFilters.enabled
+                  ? 'bg-sky-500/15 text-sky-300 border-sky-500/40 hover:bg-sky-500/25'
+                  : 'bg-slate-800/80 text-slate-400 hover:text-slate-200 border-slate-700'
+              }`}
+              title="Abrir painel de filtros de pós-processamento (Granulação, Aberração, Vinheta)"
             >
-              <Sparkles className={`w-3.5 h-3.5 ${isGeneratingImage ? 'animate-spin' : ''}`} />
-              <span>{currentSceneInfo.scene?.imageUrl ? 'Regerar Visual' : 'Gerar Quadro IA'}</span>
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Video Canvas Stage */}
-      <div className="flex items-center justify-center bg-slate-950/90 rounded-xl overflow-hidden border border-slate-800/60 p-2 min-h-[300px] relative group">
-        <div
-          className={`w-full flex items-center justify-center relative mx-auto transition-all ${getAspectRatioClasses()}`}
-        >
-          <canvas
-            ref={canvasRef}
-            className="w-full h-full object-contain rounded-lg shadow-2xl bg-black"
-          />
-
-          {/* Big Play overlay when paused */}
-          {!isPlaying && (
-            <button
-              id="canvas-play-overlay-btn"
-              onClick={togglePlay}
-              className="absolute inset-0 m-auto w-16 h-16 rounded-full bg-sky-500/90 hover:bg-sky-400 text-white flex items-center justify-center shadow-2xl shadow-sky-500/40 transform hover:scale-110 active:scale-95 transition-all group-hover:opacity-100 opacity-90 backdrop-blur-sm"
-              title="Reproduzir Vídeo"
-            >
-              <Play className="w-8 h-8 fill-current translate-x-0.5" />
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Interactive Timeline & Scrubber with Scene Markers */}
-      <div className="flex flex-col gap-1.5">
-        <div
-          id="timeline-scrubber"
-          onClick={handleTimelineScrub}
-          className="h-7 w-full bg-slate-950/80 border border-slate-800 rounded-lg relative cursor-pointer overflow-hidden flex items-center p-1 group select-none"
-        >
-          {/* Scene Blocks / Markers */}
-          {project.scenes.map((scene, idx) => {
-            let start = 0;
-            for (let i = 0; i < idx; i++) {
-              start += project.scenes[i].duration;
-            }
-            const widthPct = (scene.duration / totalDuration) * 100;
-            const leftPct = (start / totalDuration) * 100;
-            const isActive = currentSceneInfo.index === idx;
-
-            return (
-              <div
-                key={scene.id}
-                style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
-                className={`absolute top-0 bottom-0 border-r border-slate-800/80 transition-colors flex items-center justify-between px-1.5 ${
-                  isActive ? 'bg-sky-500/15' : 'hover:bg-slate-800/30'
-                }`}
-              >
-                <span className="text-[10px] font-mono text-slate-400 truncate opacity-80 pointer-events-none">
-                  C{idx + 1}: {scene.duration}s
+              <Sliders className="w-3.5 h-3.5" />
+              <span>Filtros IA</span>
+              {localFilters.enabled && (
+                <span className="w-4 h-4 rounded-full bg-sky-400 text-slate-950 font-bold text-[9px] flex items-center justify-center">
+                  {activeFxCount}
                 </span>
-              </div>
-            );
-          })}
+              )}
+              {isPostProcessingOpen ? (
+                <ChevronUp className="w-3 h-3 ml-0.5" />
+              ) : (
+                <ChevronDown className="w-3 h-3 ml-0.5" />
+              )}
+            </button>
 
-          {/* Progress fill */}
-          <div
-            style={{ width: `${(currentTime / totalDuration) * 100}%` }}
-            className="absolute top-0 bottom-0 left-0 bg-gradient-to-r from-sky-500/40 to-sky-400/60 pointer-events-none transition-all duration-75"
-          />
-
-          {/* Playhead Needle */}
-          <div
-            style={{ left: `${(currentTime / totalDuration) * 100}%` }}
-            className="absolute top-0 bottom-0 w-1 bg-sky-400 shadow-lg shadow-sky-400/80 pointer-events-none -translate-x-1/2 z-10"
-          >
-            <div className="w-2.5 h-2.5 bg-white rounded-full -translate-x-[3px] -translate-y-1 shadow-md" />
-          </div>
-        </div>
-
-        {/* Timecode labels */}
-        <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 px-1">
-          <span>{currentTime.toFixed(1)}s</span>
-          <span>{totalDuration.toFixed(1)}s</span>
-        </div>
-      </div>
-
-      {/* Playback Controls Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-slate-800/60">
-        {/* Left: Play/Pause/Replay/Step */}
-        <div className="flex items-center gap-1.5">
-          <button
-            id="player-play-btn"
-            onClick={togglePlay}
-            className="p-2 rounded-lg bg-sky-500 hover:bg-sky-400 text-white shadow-md shadow-sky-500/20 active:scale-95 transition-all"
-            title={isPlaying ? 'Pausar' : 'Reproduzir'}
-          >
-            {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 fill-current" />}
-          </button>
-
-          <button
-            id="player-restart-btn"
-            onClick={() => {
-              setCurrentTime(0);
-              lastSpokenSceneRef.current = -1;
-            }}
-            className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
-            title="Voltar ao Início"
-          >
-            <RotateCcw className="w-4 h-4" />
-          </button>
-
-          <button
-            id="player-prev-scene-btn"
-            onClick={() => handleJumpToScene(Math.max(0, currentSceneInfo.index - 1))}
-            disabled={currentSceneInfo.index === 0}
-            className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 disabled:opacity-30 transition-colors"
-            title="Cena Anterior"
-          >
-            <SkipBack className="w-4 h-4" />
-          </button>
-
-          <button
-            id="player-next-scene-btn"
-            onClick={() =>
-              handleJumpToScene(Math.min(project.scenes.length - 1, currentSceneInfo.index + 1))
-            }
-            disabled={currentSceneInfo.index >= project.scenes.length - 1}
-            className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 disabled:opacity-30 transition-colors"
-            title="Próxima Cena"
-          >
-            <SkipForward className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Center: Audio soundtrack toggle & Narration indicator */}
-        <div className="flex items-center gap-2 bg-slate-950/60 border border-slate-800/80 px-2.5 py-1 rounded-lg">
-          <button
-            id="player-mute-btn"
-            onClick={() => setIsMuted(!isMuted)}
-            className="text-slate-400 hover:text-slate-200 transition-colors"
-            title={isMuted ? 'Desmutar Áudio' : 'Mutar Áudio'}
-          >
-            {isMuted ? <VolumeX className="w-4 h-4 text-rose-400" /> : <Volume2 className="w-4 h-4 text-emerald-400" />}
-          </button>
-
-          <span className="text-[11px] text-slate-300 font-medium flex items-center gap-1.5">
-            <Music className="w-3 h-3 text-sky-400" />
-            <span className="capitalize">{project.soundtrack.replace('_', ' ')}</span>
-          </span>
-        </div>
-
-        {/* Right: Speed & Fullscreen */}
-        <div className="flex items-center gap-1.5">
-          <div className="flex items-center gap-1 bg-slate-950/60 border border-slate-800/80 rounded-lg p-0.5 text-xs">
-            {[0.5, 1, 1.5, 2].map((speed) => (
+            {onGenerateSceneImage && (
               <button
-                key={speed}
-                onClick={() => setPlaybackSpeed(speed)}
-                className={`px-2 py-0.5 rounded text-[10px] font-mono font-medium transition-all ${
-                  playbackSpeed === speed
-                    ? 'bg-sky-500 text-white font-bold'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-                }`}
+                id="generate-current-frame-btn"
+                onClick={() => onGenerateSceneImage(currentSceneInfo.index)}
+                disabled={isGeneratingImage}
+                className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-all disabled:opacity-50"
+                title="Gerar visual de cena com IA"
               >
-                {speed}x
+                <Sparkles className={`w-3.5 h-3.5 ${isGeneratingImage ? 'animate-spin' : ''}`} />
+                <span>{currentSceneInfo.scene?.imageUrl ? 'Regerar Visual' : 'Gerar Quadro IA'}</span>
               </button>
-            ))}
+            )}
+          </div>
+        </div>
+
+        {/* Video Canvas Stage */}
+        <div className="flex items-center justify-center bg-slate-950/90 rounded-xl overflow-hidden border border-slate-800/60 p-2 min-h-[300px] relative group">
+          <div
+            className={`w-full flex items-center justify-center relative mx-auto transition-all ${getAspectRatioClasses()}`}
+          >
+            <canvas
+              ref={canvasRef}
+              className="w-full h-full object-contain rounded-lg shadow-2xl bg-black"
+            />
+
+            {/* Live FX Badge on Canvas overlay */}
+            {localFilters.enabled && (
+              <div className="absolute top-2 left-2 flex items-center gap-1.5 bg-slate-950/80 backdrop-blur-md border border-slate-700/80 px-2 py-0.5 rounded-full text-[10px] text-sky-300 font-mono shadow pointer-events-none">
+                <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
+                <span>FX: {localFilters.colorGrading.replace('_', ' ').toUpperCase()}</span>
+                {localFilters.filmGrain > 0 && <span>· {localFilters.filmGrain}% GRAIN</span>}
+                {localFilters.chromaticAberration > 0 && (
+                  <span>· {localFilters.chromaticAberration}px RGB</span>
+                )}
+              </div>
+            )}
+
+            {/* Big Play overlay when paused */}
+            {!isPlaying && (
+              <button
+                id="canvas-play-overlay-btn"
+                onClick={togglePlay}
+                className="absolute inset-0 m-auto w-16 h-16 rounded-full bg-sky-500/90 hover:bg-sky-400 text-white flex items-center justify-center shadow-2xl shadow-sky-500/40 transform hover:scale-110 active:scale-95 transition-all group-hover:opacity-100 opacity-90 backdrop-blur-sm"
+                title="Reproduzir Vídeo"
+              >
+                <Play className="w-8 h-8 fill-current translate-x-0.5" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Interactive Timeline & Scrubber with Scene Markers */}
+        <div className="flex flex-col gap-1.5">
+          <div
+            id="timeline-scrubber"
+            onClick={handleTimelineScrub}
+            className="h-7 w-full bg-slate-950/80 border border-slate-800 rounded-lg relative cursor-pointer overflow-hidden flex items-center p-1 group select-none"
+          >
+            {/* Scene Blocks / Markers */}
+            {project.scenes.map((scene, idx) => {
+              let start = 0;
+              for (let i = 0; i < idx; i++) {
+                start += project.scenes[i].duration;
+              }
+              const widthPct = (scene.duration / totalDuration) * 100;
+              const leftPct = (start / totalDuration) * 100;
+              const isActive = currentSceneInfo.index === idx;
+
+              return (
+                <div
+                  key={scene.id}
+                  style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
+                  className={`absolute top-0 bottom-0 border-r border-slate-800/80 transition-colors flex items-center justify-between px-1.5 ${
+                    isActive ? 'bg-sky-500/15' : 'hover:bg-slate-800/30'
+                  }`}
+                >
+                  <span className="text-[10px] font-mono text-slate-400 truncate opacity-80 pointer-events-none">
+                    C{idx + 1}: {scene.duration}s
+                  </span>
+                </div>
+              );
+            })}
+
+            {/* Progress fill */}
+            <div
+              style={{ width: `${(currentTime / totalDuration) * 100}%` }}
+              className="absolute top-0 bottom-0 left-0 bg-gradient-to-r from-sky-500/40 to-sky-400/60 pointer-events-none transition-all duration-75"
+            />
+
+            {/* Playhead Needle */}
+            <div
+              style={{ left: `${(currentTime / totalDuration) * 100}%` }}
+              className="absolute top-0 bottom-0 w-1 bg-sky-400 shadow-lg shadow-sky-400/80 pointer-events-none -translate-x-1/2 z-10"
+            >
+              <div className="w-2.5 h-2.5 bg-white rounded-full -translate-x-[3px] -translate-y-1 shadow-md" />
+            </div>
           </div>
 
-          <button
-            id="player-fullscreen-btn"
-            onClick={toggleFullscreen}
-            className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
-            title="Tela Cheia"
-          >
-            {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-          </button>
+          {/* Timecode labels */}
+          <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 px-1">
+            <span>{currentTime.toFixed(1)}s</span>
+            <span>{totalDuration.toFixed(1)}s</span>
+          </div>
+        </div>
+
+        {/* Playback Controls Toolbar */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-slate-800/60">
+          {/* Left: Play/Pause/Replay/Step */}
+          <div className="flex items-center gap-1.5">
+            <button
+              id="player-play-btn"
+              onClick={togglePlay}
+              className="p-2 rounded-lg bg-sky-500 hover:bg-sky-400 text-white shadow-md shadow-sky-500/20 active:scale-95 transition-all"
+              title={isPlaying ? 'Pausar' : 'Reproduzir'}
+            >
+              {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 fill-current" />}
+            </button>
+
+            <button
+              id="player-restart-btn"
+              onClick={() => {
+                setCurrentTime(0);
+                lastSpokenSceneRef.current = -1;
+              }}
+              className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+              title="Voltar ao Início"
+            >
+              <RotateCcw className="w-4 h-4" />
+            </button>
+
+            <button
+              id="player-prev-scene-btn"
+              onClick={() => handleJumpToScene(Math.max(0, currentSceneInfo.index - 1))}
+              disabled={currentSceneInfo.index === 0}
+              className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 disabled:opacity-30 transition-colors"
+              title="Cena Anterior"
+            >
+              <SkipBack className="w-4 h-4" />
+            </button>
+
+            <button
+              id="player-next-scene-btn"
+              onClick={() =>
+                handleJumpToScene(Math.min(project.scenes.length - 1, currentSceneInfo.index + 1))
+              }
+              disabled={currentSceneInfo.index >= project.scenes.length - 1}
+              className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 disabled:opacity-30 transition-colors"
+              title="Próxima Cena"
+            >
+              <SkipForward className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Center: Audio soundtrack toggle & Narration indicator */}
+          <div className="flex items-center gap-2 bg-slate-950/60 border border-slate-800/80 px-2.5 py-1 rounded-lg">
+            <button
+              id="player-mute-btn"
+              onClick={() => setIsMuted(!isMuted)}
+              className="text-slate-400 hover:text-slate-200 transition-colors"
+              title={isMuted ? 'Desmutar Áudio' : 'Mutar Áudio'}
+            >
+              {isMuted ? (
+                <VolumeX className="w-4 h-4 text-rose-400" />
+              ) : (
+                <Volume2 className="w-4 h-4 text-emerald-400" />
+              )}
+            </button>
+
+            <span className="text-[11px] text-slate-300 font-medium flex items-center gap-1.5">
+              <Music className="w-3 h-3 text-sky-400" />
+              <span className="capitalize">{project.soundtrack.replace('_', ' ')}</span>
+            </span>
+          </div>
+
+          {/* Right: Quick Split-Screen A/B & Speed & Fullscreen */}
+          <div className="flex items-center gap-1.5">
+            <button
+              id="player-quick-splitscreen-btn"
+              onClick={() => setIsSplitScreen(!isSplitScreen)}
+              className={`p-2 rounded-lg text-xs font-medium transition-all ${
+                isSplitScreen
+                  ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+              }`}
+              title="Dividir Tela (A/B) para Comparar Efeitos"
+            >
+              <Columns className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center gap-1 bg-slate-950/60 border border-slate-800/80 rounded-lg p-0.5 text-xs">
+              {[0.5, 1, 1.5, 2].map((speed) => (
+                <button
+                  key={speed}
+                  onClick={() => setPlaybackSpeed(speed)}
+                  className={`px-2 py-0.5 rounded text-[10px] font-mono font-medium transition-all ${
+                    playbackSpeed === speed
+                      ? 'bg-sky-500 text-white font-bold'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                  }`}
+                >
+                  {speed}x
+                </button>
+              ))}
+            </div>
+
+            <button
+              id="player-fullscreen-btn"
+              onClick={toggleFullscreen}
+              className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+              title="Tela Cheia"
+            >
+              {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Post-Processing Filters Collapsible / Dedicated Drawer Panel */}
+      {isPostProcessingOpen && (
+        <PostProcessingPanel
+          filters={localFilters}
+          onChangeFilters={handleFiltersChange}
+          isSplitScreen={isSplitScreen}
+          onToggleSplitScreen={() => setIsSplitScreen(!isSplitScreen)}
+          splitPosition={splitPosition}
+          onChangeSplitPosition={setSplitPosition}
+          onHoldCompareStart={() => setIsHoldingCompare(true)}
+          onHoldCompareEnd={() => setIsHoldingCompare(false)}
+          isHoldingCompare={isHoldingCompare}
+          theme={theme}
+          onClose={() => setIsPostProcessingOpen(false)}
+        />
+      )}
     </div>
   );
 };
+

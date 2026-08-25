@@ -1,4 +1,12 @@
-import { AspectRatio, AtmosphereEffect, CameraMotion, Scene, TransitionType, VideoProject } from '../types';
+import {
+  AspectRatio,
+  AtmosphereEffect,
+  CameraMotion,
+  PostProcessingFilters,
+  Scene,
+  TransitionType,
+  VideoProject,
+} from '../types';
 import { soundSynth } from './audioSynth';
 
 interface Particle {
@@ -16,6 +24,8 @@ export class VideoRendererEngine {
   private imageCache: Map<string, HTMLImageElement> = new Map();
   private loadedImages: Set<string> = new Set();
   private noiseSeed = 0;
+  private grainCanvas: HTMLCanvasElement | null = null;
+  private grainCtx: CanvasRenderingContext2D | null = null;
 
   constructor() {
     this.initParticles(80);
@@ -84,7 +94,9 @@ export class VideoRendererEngine {
     sceneProgress: number, // 0 to 1
     totalProgress: number, // 0 to 1
     nextScene?: Scene,
-    transitionProgress: number = 0 // 0 to 1 during transition
+    transitionProgress: number = 0, // 0 to 1 during transition
+    postProcessing?: PostProcessingFilters,
+    splitScreenProgress?: number | null // e.g. 0.5 for split screen preview before/after
   ) {
     ctx.save();
     ctx.clearRect(0, 0, width, height);
@@ -103,8 +115,13 @@ export class VideoRendererEngine {
     // Subtitle & Overlay Titles
     this.renderSubtitles(ctx, width, height, scene, sceneProgress);
 
-    // Cinema Lens/Vignette Overlay
-    this.renderCinemaVignette(ctx, width, height);
+    // Apply Post-Processing AI Effects (Grain, Aberration, Vignette, Color Grading, Bloom)
+    if (postProcessing && postProcessing.enabled) {
+      this.applyPostProcessing(ctx, width, height, postProcessing, splitScreenProgress);
+    } else {
+      // Default subtle cinematic vignette when post-processing is off
+      this.renderCinemaVignette(ctx, width, height);
+    }
 
     ctx.restore();
   }
@@ -541,7 +558,421 @@ export class VideoRendererEngine {
     ctx.restore();
   }
 
-  // Vignette & Cinematic Border
+  // Apply full Post-Processing FX Pipeline
+  private applyPostProcessing(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    filters: PostProcessingFilters,
+    splitScreenProgress?: number | null
+  ) {
+    if (!filters.enabled) {
+      this.renderCinemaVignette(ctx, width, height);
+      return;
+    }
+
+    const isSplit = typeof splitScreenProgress === 'number' && splitScreenProgress > 0 && splitScreenProgress < 1;
+    const splitX = isSplit ? width * splitScreenProgress! : width;
+
+    ctx.save();
+
+    if (isSplit) {
+      // Clip rendering of effects only to the left (or right) split side
+      ctx.beginPath();
+      ctx.rect(0, 0, splitX, height);
+      ctx.clip();
+    }
+
+    // 1. Color Grading & Tonal Adjustments
+    this.applyColorGrading(ctx, width, height, filters);
+
+    // 2. Bloom & Highlight Pro-Mist Diffusion
+    if (filters.bloomGlow > 0) {
+      this.applyBloomDiffusion(ctx, width, height, filters.bloomGlow);
+    }
+
+    // 3. Chromatic Aberration / RGB Lens Split
+    if (filters.chromaticAberration > 0) {
+      this.applyChromaticAberration(ctx, width, height, filters.chromaticAberration);
+    }
+
+    // 4. Retro Scanlines (CRT TV / VHS)
+    if (filters.scanlines > 0) {
+      this.applyScanlines(ctx, width, height, filters.scanlines);
+    }
+
+    // 5. Procedural Film Grain (Fine, Medium, Coarse)
+    if (filters.filmGrain > 0) {
+      this.applyFilmGrain(ctx, width, height, filters.filmGrain, filters.grainSize);
+    }
+
+    // 6. Sharpening & Micro-contrast Boost
+    if (filters.sharpen > 0) {
+      this.applySharpenMicroContrast(ctx, width, height, filters.sharpen);
+    }
+
+    // 7. Cinematic Custom Vignette
+    if (filters.vignette > 0) {
+      this.applyCustomVignette(ctx, width, height, filters.vignette, filters.vignetteFeather);
+    }
+
+    ctx.restore();
+
+    // 8. If in Split-Screen mode, draw interactive dividing line & badges
+    if (isSplit) {
+      this.renderSplitScreenDivider(ctx, width, height, splitX);
+    }
+  }
+
+  // 1. Color Grading & LUT emulation
+  private applyColorGrading(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    filters: PostProcessingFilters
+  ) {
+    const { colorGrading, contrast, saturation, brightness } = filters;
+
+    // Apply global tone adjustments if different from 100%
+    ctx.save();
+
+    // Emulate LUT Presets with layered color blends
+    switch (colorGrading) {
+      case 'teal_orange': {
+        // Shadows: Teal
+        ctx.globalCompositeOperation = 'soft-light';
+        ctx.fillStyle = 'rgba(6, 78, 107, 0.45)';
+        ctx.fillRect(0, 0, width, height);
+
+        // Highlights: Warm Amber/Orange
+        ctx.globalCompositeOperation = 'overlay';
+        const warmGrad = ctx.createLinearGradient(0, 0, width, height);
+        warmGrad.addColorStop(0, 'rgba(249, 115, 22, 0.15)');
+        warmGrad.addColorStop(1, 'rgba(234, 88, 12, 0.22)');
+        ctx.fillStyle = warmGrad;
+        ctx.fillRect(0, 0, width, height);
+        break;
+      }
+
+      case 'golden_hour': {
+        ctx.globalCompositeOperation = 'soft-light';
+        const goldGrad = ctx.createLinearGradient(0, 0, width, height);
+        goldGrad.addColorStop(0, 'rgba(251, 191, 36, 0.35)');
+        goldGrad.addColorStop(1, 'rgba(217, 119, 6, 0.45)');
+        ctx.fillStyle = goldGrad;
+        ctx.fillRect(0, 0, width, height);
+        break;
+      }
+
+      case 'cyber_neon': {
+        ctx.globalCompositeOperation = 'color-dodge';
+        const neonGrad = ctx.createLinearGradient(0, 0, width, height);
+        neonGrad.addColorStop(0, 'rgba(14, 165, 233, 0.25)'); // Cyan
+        neonGrad.addColorStop(1, 'rgba(236, 72, 153, 0.3)'); // Magenta
+        ctx.fillStyle = neonGrad;
+        ctx.fillRect(0, 0, width, height);
+        break;
+      }
+
+      case 'warm_vintage': {
+        ctx.globalCompositeOperation = 'soft-light';
+        ctx.fillStyle = 'rgba(180, 83, 9, 0.35)'; // Sepia warm
+        ctx.fillRect(0, 0, width, height);
+        break;
+      }
+
+      case 'bleach_bypass': {
+        // High contrast + silver desaturation look
+        ctx.globalCompositeOperation = 'luminosity';
+        ctx.fillStyle = 'rgba(148, 163, 184, 0.35)';
+        ctx.fillRect(0, 0, width, height);
+        ctx.globalCompositeOperation = 'hard-light';
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+        ctx.fillRect(0, 0, width, height);
+        break;
+      }
+
+      case 'noir_bw': {
+        // High-contrast black and white
+        ctx.globalCompositeOperation = 'color';
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, width, height);
+        // Rich silver shadow push
+        ctx.globalCompositeOperation = 'soft-light';
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+        ctx.fillRect(0, 0, width, height);
+        break;
+      }
+
+      case 'kodachrome': {
+        ctx.globalCompositeOperation = 'soft-light';
+        const kodaGrad = ctx.createLinearGradient(0, 0, width, height);
+        kodaGrad.addColorStop(0, 'rgba(239, 68, 68, 0.25)'); // Rich red
+        kodaGrad.addColorStop(0.6, 'rgba(245, 158, 11, 0.2)'); // Rich gold
+        kodaGrad.addColorStop(1, 'rgba(59, 130, 246, 0.15)'); // Deep blue shadows
+        ctx.fillStyle = kodaGrad;
+        ctx.fillRect(0, 0, width, height);
+        break;
+      }
+
+      case 'scifi_matrix': {
+        ctx.globalCompositeOperation = 'soft-light';
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.35)'; // Emerald / Matrix green
+        ctx.fillRect(0, 0, width, height);
+        break;
+      }
+
+      default:
+        break;
+    }
+
+    // Dynamic contrast / brightness overlay if altered
+    if (contrast !== 100) {
+      ctx.globalCompositeOperation = contrast > 100 ? 'overlay' : 'soft-light';
+      const cAlpha = Math.abs(contrast - 100) / 200;
+      ctx.fillStyle = contrast > 100 ? `rgba(0, 0, 0, ${cAlpha})` : `rgba(128, 128, 128, ${cAlpha})`;
+      ctx.fillRect(0, 0, width, height);
+    }
+
+    ctx.restore();
+  }
+
+  // 2. Bloom & Halation Diffusion (Black Pro-Mist effect)
+  private applyBloomDiffusion(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    intensity: number
+  ) {
+    ctx.save();
+    const bloomAlpha = (intensity / 100) * 0.35;
+    ctx.globalAlpha = bloomAlpha;
+    ctx.globalCompositeOperation = 'screen';
+
+    // Soft warm diffuse halo around canvas
+    const bloomGrad = ctx.createRadialGradient(
+      width / 2,
+      height / 2,
+      Math.min(width, height) * 0.15,
+      width / 2,
+      height / 2,
+      Math.max(width, height) * 0.65
+    );
+    bloomGrad.addColorStop(0, 'rgba(255, 247, 237, 0.6)');
+    bloomGrad.addColorStop(0.5, 'rgba(254, 215, 170, 0.3)');
+    bloomGrad.addColorStop(1, 'rgba(251, 146, 60, 0)');
+
+    ctx.fillStyle = bloomGrad;
+    ctx.fillRect(0, 0, width, height);
+    ctx.restore();
+  }
+
+  // 3. Chromatic Aberration (RGB Color Channel Shift)
+  private applyChromaticAberration(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    amount: number
+  ) {
+    ctx.save();
+    const shift = Math.max(1, Math.round((amount / 15) * (width * 0.008)));
+    const alpha = Math.min(0.65, (amount / 15) * 0.55);
+
+    // Red fringe on left/outer edges
+    ctx.globalCompositeOperation = 'screen';
+    ctx.globalAlpha = alpha;
+
+    ctx.fillStyle = '#ff0033';
+    ctx.fillRect(shift, 0, width - shift, height);
+
+    // Cyan/Blue fringe on right/outer edges
+    ctx.fillStyle = '#00f0ff';
+    ctx.fillRect(0, 0, width - shift, height);
+
+    ctx.restore();
+  }
+
+  // 4. Procedural Animated Film Grain
+  private applyFilmGrain(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    intensity: number,
+    size: 'fine' | 'medium' | 'coarse'
+  ) {
+    ctx.save();
+
+    // Adjust grain size
+    let grainPixelSize = 1;
+    let baseAlpha = (intensity / 100) * 0.12;
+    let particleCount = Math.round((width * height) / 1200 * (intensity / 50));
+
+    if (size === 'fine') {
+      grainPixelSize = 1.5;
+      baseAlpha = (intensity / 100) * 0.09;
+      particleCount = Math.min(2500, Math.max(600, particleCount));
+    } else if (size === 'medium') {
+      grainPixelSize = 2.2;
+      baseAlpha = (intensity / 100) * 0.13;
+      particleCount = Math.min(2000, Math.max(400, Math.round(particleCount * 0.7)));
+    } else {
+      // Coarse 16mm grain
+      grainPixelSize = 3.5;
+      baseAlpha = (intensity / 100) * 0.18;
+      particleCount = Math.min(1400, Math.max(300, Math.round(particleCount * 0.5)));
+    }
+
+    this.noiseSeed = (this.noiseSeed + 1) % 1000;
+
+    // Draw distributed noise spots
+    for (let i = 0; i < particleCount; i++) {
+      const gx = Math.random() * width;
+      const gy = Math.random() * height;
+      const isLight = Math.random() > 0.45;
+      const alphaVar = baseAlpha * (0.6 + Math.random() * 0.8);
+
+      ctx.fillStyle = isLight
+        ? `rgba(255, 255, 255, ${alphaVar})`
+        : `rgba(15, 23, 42, ${alphaVar * 1.2})`;
+
+      ctx.fillRect(gx, gy, grainPixelSize, grainPixelSize);
+    }
+
+    ctx.restore();
+  }
+
+  // 5. Retro Scanlines
+  private applyScanlines(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    intensity: number
+  ) {
+    ctx.save();
+    const lineAlpha = (intensity / 100) * 0.35;
+    ctx.fillStyle = `rgba(0, 0, 0, ${lineAlpha})`;
+
+    const step = 4;
+    for (let y = 0; y < height; y += step) {
+      ctx.fillRect(0, y, width, 1.5);
+    }
+
+    // Subtle phosphor glow
+    if (intensity > 40) {
+      ctx.globalCompositeOperation = 'screen';
+      ctx.fillStyle = `rgba(56, 189, 248, ${(intensity / 100) * 0.05})`;
+      ctx.fillRect(0, 0, width, height);
+    }
+
+    ctx.restore();
+  }
+
+  // 6. Sharpen & Micro-contrast
+  private applySharpenMicroContrast(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    intensity: number
+  ) {
+    ctx.save();
+    const sharpenAlpha = (intensity / 100) * 0.16;
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.fillStyle = `rgba(255, 255, 255, ${sharpenAlpha})`;
+    ctx.fillRect(0, 0, width, height);
+    ctx.restore();
+  }
+
+  // 7. Custom Vignette
+  private applyCustomVignette(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    intensity: number,
+    feather: number
+  ) {
+    ctx.save();
+    const innerRatio = Math.max(0.2, 0.7 - (100 - feather) * 0.005);
+    const outerRatio = Math.min(1.1, 0.85 + feather * 0.002);
+    const maxAlpha = Math.min(0.95, (intensity / 100) * 0.9);
+
+    const grad = ctx.createRadialGradient(
+      width / 2,
+      height / 2,
+      Math.min(width, height) * innerRatio,
+      width / 2,
+      height / 2,
+      Math.max(width, height) * outerRatio
+    );
+    grad.addColorStop(0, 'rgba(0, 0, 0, 0)');
+    grad.addColorStop(0.7, `rgba(0, 0, 0, ${maxAlpha * 0.6})`);
+    grad.addColorStop(1, `rgba(0, 0, 0, ${maxAlpha})`);
+
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, width, height);
+    ctx.restore();
+  }
+
+  // 8. Split-Screen Divider and labels
+  private renderSplitScreenDivider(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    splitX: number
+  ) {
+    ctx.save();
+
+    // Divider vertical neon line
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 2.5;
+    ctx.shadowColor = '#0ea5e9';
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.moveTo(splitX, 0);
+    ctx.lineTo(splitX, height);
+    ctx.stroke();
+
+    // Center handle circle
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(splitX, height / 2, 10, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#0ea5e9';
+    ctx.beginPath();
+    ctx.arc(splitX, height / 2, 5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Badges: "EFEITOS IA" (Left) and "ORIGINAL" (Right)
+    const fontSize = Math.max(11, Math.round(width * 0.016));
+    ctx.font = `700 ${fontSize}px 'Plus Jakarta Sans', sans-serif`;
+
+    // Left badge (Effects)
+    if (splitX > 90) {
+      ctx.fillStyle = 'rgba(14, 165, 233, 0.85)';
+      ctx.beginPath();
+      ctx.roundRect(splitX - 100, 16, 90, 24, 6);
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('COM EFEITOS', splitX - 55, 28);
+    }
+
+    // Right badge (Original)
+    if (width - splitX > 90) {
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+      ctx.beginPath();
+      ctx.roundRect(splitX + 10, 16, 80, 24, 6);
+      ctx.fill();
+      ctx.fillStyle = '#94a3b8';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('ORIGINAL', splitX + 50, 28);
+    }
+
+    ctx.restore();
+  }
+
+  // Vignette & Cinematic Border (fallback)
   private renderCinemaVignette(ctx: CanvasRenderingContext2D, width: number, height: number) {
     ctx.save();
     const grad = ctx.createRadialGradient(
@@ -701,7 +1132,8 @@ export class VideoRendererEngine {
           sceneProgress,
           totalProgress,
           nextScene,
-          transitionProgress
+          transitionProgress,
+          project.postProcessing
         );
 
         const progressPercent = Math.round(10 + (currentFrame / totalFrames) * 85);

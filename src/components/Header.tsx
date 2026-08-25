@@ -1,4 +1,5 @@
 import React from 'react';
+import { AspectRatio, VideoProject, UserProfile, NavigationView } from '../types';
 import {
   Film,
   Sparkles,
@@ -14,8 +15,11 @@ import {
   Cloud,
   LogOut,
   User,
+  LayoutGrid,
+  Video,
+  Compass,
+  Plus,
 } from 'lucide-react';
-import { AspectRatio, VideoProject, UserProfile } from '../types';
 
 interface HeaderProps {
   project: VideoProject;
@@ -24,6 +28,7 @@ interface HeaderProps {
   onOpenExport: () => void;
   onOpenScriptGenerator: () => void;
   onOpenCloudProjects: () => void;
+  onOpenNewProject?: () => void;
   isExporting: boolean;
   theme?: 'dark' | 'light';
   onToggleTheme?: () => void;
@@ -31,6 +36,8 @@ interface HeaderProps {
   onSignIn: () => void;
   onSignOut: () => void;
   isSyncing?: boolean;
+  currentView: NavigationView;
+  onSelectView: (view: NavigationView) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -40,6 +47,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenExport,
   onOpenScriptGenerator,
   onOpenCloudProjects,
+  onOpenNewProject,
   isExporting,
   theme = 'dark',
   onToggleTheme,
@@ -47,93 +55,158 @@ export const Header: React.FC<HeaderProps> = ({
   onSignIn,
   onSignOut,
   isSyncing = false,
+  currentView,
+  onSelectView,
 }) => {
   const totalDuration = project.scenes.reduce((acc, s) => acc + s.duration, 0);
 
   return (
-    <header className={`border-b transition-colors sticky top-0 z-40 px-4 lg:px-6 py-3 ${
+    <header className={`border-b transition-colors sticky top-0 z-40 px-3 lg:px-6 py-2.5 ${
       theme === 'light'
-        ? 'bg-white/90 border-slate-200 text-slate-900 backdrop-blur-md shadow-sm'
-        : 'bg-slate-950/80 border-slate-800 text-slate-100 backdrop-blur-md'
+        ? 'bg-white/95 border-slate-200 text-slate-900 backdrop-blur-md shadow-sm'
+        : 'bg-slate-950/90 border-slate-800 text-slate-100 backdrop-blur-md'
     }`}>
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3">
-        {/* Brand & Project Name */}
-        <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-start">
-          <div className="flex items-center gap-2.5">
-            <div className="h-9 w-9 rounded-xl bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-sky-500/20 text-white font-bold">
-              <Film className="w-5 h-5 text-white" />
+        {/* Brand & View Switcher */}
+        <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-start flex-wrap">
+          <div
+            onClick={() => onSelectView('home')}
+            className="flex items-center gap-2 cursor-pointer group select-none"
+            title="Ir para o Menu Inicial"
+          >
+            <div className="h-8 w-8 rounded-xl bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center shadow-md shadow-sky-500/20 text-white font-bold group-hover:scale-105 transition-transform">
+              <Film className="w-4 h-4 text-white" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1">
                 <span className={`font-bold text-sm tracking-tight ${theme === 'light' ? 'text-slate-900' : 'text-slate-100'}`}>
                   CineAI
                 </span>
-                <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20">
-                  Video Studio
+                <span className="text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.2 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20">
+                  Studio
                 </span>
               </div>
-              <input
-                id="project-title-input"
-                type="text"
-                value={project.title}
-                onChange={(e) => onUpdateProject({ title: e.target.value })}
-                className={`text-xs bg-transparent outline-none transition-colors border-b border-transparent focus:border-sky-500 max-w-[200px] truncate ${
-                  theme === 'light'
-                    ? 'text-slate-600 hover:text-slate-900 focus:text-slate-900'
-                    : 'text-slate-400 hover:text-slate-200 focus:text-white'
-                }`}
-                placeholder="Título do Projeto..."
-              />
             </div>
           </div>
 
-          {/* Quick Metrics on mobile */}
-          <div className="flex items-center gap-2 md:hidden">
-            <span className={`text-xs px-2 py-1 rounded border font-mono ${
-              theme === 'light' ? 'bg-slate-100 border-slate-300 text-slate-700' : 'bg-slate-900 border-slate-800 text-slate-300'
-            }`}>
-              {totalDuration}s
-            </span>
-          </div>
-        </div>
-
-        {/* Center Controls: Aspect Ratio & Duration */}
-        <div className={`flex items-center gap-2 rounded-xl p-1 shadow-inner border ${
-          theme === 'light' ? 'bg-slate-100 border-slate-200' : 'bg-slate-900/90 border-slate-800/80'
-        }`}>
-          <div className="flex items-center gap-1">
-            {(['16:9', '9:16', '1:1', '4:3'] as AspectRatio[]).map((ratio) => (
-              <button
-                key={ratio}
-                id={`ratio-btn-${ratio.replace(':', '-')}`}
-                onClick={() => onUpdateProject({ aspectRatio: ratio })}
-                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
-                  project.aspectRatio === ratio
-                    ? 'bg-sky-500 text-white shadow-sm font-semibold'
-                    : theme === 'light'
-                    ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                }`}
-                title={`Proporção ${ratio}`}
-              >
-                {ratio === '16:9' ? '16:9 (Cinema)' : ratio === '9:16' ? '9:16 (Reels)' : ratio}
-              </button>
-            ))}
-          </div>
-
-          <div className={`h-4 w-px mx-1 hidden sm:block ${theme === 'light' ? 'bg-slate-300' : 'bg-slate-800'}`} />
-
-          <div className={`hidden sm:flex items-center gap-2 px-2 text-xs font-medium ${
-            theme === 'light' ? 'text-slate-600' : 'text-slate-400'
+          {/* Primary Navigation Views: Início, Estúdio, Minha Galeria, Inspiração */}
+          <div className={`flex items-center gap-0.5 p-1 rounded-xl border ${
+            theme === 'light' ? 'bg-slate-100 border-slate-200' : 'bg-slate-900/90 border-slate-800'
           }`}>
-            <Layers className="w-3.5 h-3.5 text-sky-500" />
-            <span>{project.scenes.length} {project.scenes.length === 1 ? 'cena' : 'cenas'}</span>
-            <span className="text-slate-400">•</span>
-            <span className="font-mono">{totalDuration}s total</span>
+            <button
+              id="nav-home-btn"
+              onClick={() => onSelectView('home')}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                currentView === 'home'
+                  ? 'bg-sky-500 text-white shadow-sm'
+                  : theme === 'light'
+                  ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+              }`}
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              <span>Início</span>
+            </button>
+
+            <button
+              id="nav-studio-btn"
+              onClick={() => onSelectView('studio')}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                currentView === 'studio'
+                  ? 'bg-sky-500 text-white shadow-sm'
+                  : theme === 'light'
+                  ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+              }`}
+            >
+              <Video className="w-3.5 h-3.5" />
+              <span>Estúdio</span>
+            </button>
+
+            <button
+              id="nav-my-gallery-btn"
+              onClick={() => onSelectView('my_gallery')}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                currentView === 'my_gallery'
+                  ? 'bg-sky-500 text-white shadow-sm'
+                  : theme === 'light'
+                  ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+              }`}
+            >
+              <FolderOpen className="w-3.5 h-3.5" />
+              <span>Minha Galeria</span>
+            </button>
+
+            <button
+              id="nav-inspiration-btn"
+              onClick={() => onSelectView('inspiration')}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                currentView === 'inspiration'
+                  ? 'bg-purple-600 text-white shadow-sm'
+                  : theme === 'light'
+                  ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+              }`}
+            >
+              <Compass className="w-3.5 h-3.5" />
+              <span>Inspiração</span>
+            </button>
           </div>
+
+          {/* Quick Novo Projeto Button */}
+          {onOpenNewProject && (
+            <button
+              id="header-new-project-btn"
+              onClick={onOpenNewProject}
+              className="hidden lg:flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-white text-xs font-bold shadow-sm active:scale-95 transition-all"
+              title="Criar Novo Projeto"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Novo Projeto</span>
+            </button>
+          )}
         </div>
 
-        {/* Right Actions: Cloud Projects, Auth, Theme Toggle, Templates, AI Auto Script, Export */}
+        {/* Center Controls: Aspect Ratio (Visible when in Studio) */}
+        {currentView === 'studio' && (
+          <div className={`hidden md:flex items-center gap-2 rounded-xl p-1 shadow-inner border ${
+            theme === 'light' ? 'bg-slate-100 border-slate-200' : 'bg-slate-900/90 border-slate-800/80'
+          }`}>
+            <div className="flex items-center gap-1">
+              {(['16:9', '9:16', '1:1', '4:3'] as AspectRatio[]).map((ratio) => (
+                <button
+                  key={ratio}
+                  id={`ratio-btn-${ratio.replace(':', '-')}`}
+                  onClick={() => onUpdateProject({ aspectRatio: ratio })}
+                  className={`px-2 py-0.5 rounded-lg text-xs font-medium transition-all ${
+                    project.aspectRatio === ratio
+                      ? 'bg-sky-500 text-white shadow-sm font-semibold'
+                      : theme === 'light'
+                      ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  }`}
+                  title={`Proporção ${ratio}`}
+                >
+                  {ratio}
+                </button>
+              ))}
+            </div>
+
+            <div className={`h-3.5 w-px mx-0.5 ${theme === 'light' ? 'bg-slate-300' : 'bg-slate-800'}`} />
+
+            <div className={`flex items-center gap-1.5 px-1.5 text-xs font-medium ${
+              theme === 'light' ? 'text-slate-600' : 'text-slate-400'
+            }`}>
+              <Layers className="w-3.5 h-3.5 text-sky-500" />
+              <span>{project.scenes.length} takes</span>
+              <span className="text-slate-500">•</span>
+              <span className="font-mono">{totalDuration}s</span>
+            </div>
+          </div>
+        )}
+
+        {/* Right Actions: Cloud Projects, Auth, Theme Toggle, Script Generator, Export */}
         <div className="flex items-center gap-2 w-full md:w-auto justify-end">
           {/* Cloud Projects Button */}
           <button
@@ -234,28 +307,15 @@ export const Header: React.FC<HeaderProps> = ({
           )}
 
           <button
-            id="open-templates-btn"
-            onClick={onOpenPresets}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-              theme === 'light'
-                ? 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-800'
-                : 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300 hover:border-slate-700'
-            }`}
-          >
-            <FolderOpen className="w-3.5 h-3.5 text-amber-500" />
-            <span className="hidden sm:inline">Modelos</span>
-          </button>
-
-          <button
             id="open-script-gen-btn"
             onClick={onOpenScriptGenerator}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+            className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
               theme === 'light'
                 ? 'bg-indigo-50 hover:bg-indigo-100 border-indigo-200 text-indigo-700'
                 : 'bg-slate-900 hover:bg-slate-800 border-indigo-500/30 text-slate-200 hover:border-indigo-500/60'
             }`}
           >
-            <Wand2 className="w-3.5 h-3.5 text-indigo-500 animate-pulse" />
+            <Wand2 className="w-3.5 h-3.5 text-indigo-400 animate-pulse" />
             <span>Roteiro IA</span>
           </button>
 
@@ -263,14 +323,15 @@ export const Header: React.FC<HeaderProps> = ({
             id="open-export-btn"
             onClick={onOpenExport}
             disabled={isExporting}
-            className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold text-white bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 shadow-md shadow-sky-500/20 active:scale-95 transition-all disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 shadow-md shadow-sky-500/20 active:scale-95 transition-all disabled:opacity-50"
           >
             <Download className="w-3.5 h-3.5" />
-            <span>Exportar Vídeo</span>
+            <span>Exportar</span>
           </button>
         </div>
       </div>
     </header>
   );
 };
+
 

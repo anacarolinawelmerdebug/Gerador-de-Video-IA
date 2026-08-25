@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Wand2, Sparkles, Film, ArrowRight, Loader2 } from 'lucide-react';
 import { Scene, VideoProject, VideoStyle } from '../types';
 import { generateScriptAPI } from '../services/geminiService';
+import { StyleSelectorGrid } from './StyleSelectorGrid';
 
 interface ScriptGeneratorModalProps {
   isOpen: boolean;
@@ -60,7 +61,7 @@ export const ScriptGeneratorModal: React.FC<ScriptGeneratorModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl max-h-[90vh] shadow-2xl overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-slate-800">
           <div className="flex items-center gap-2.5">
@@ -86,7 +87,7 @@ export const ScriptGeneratorModal: React.FC<ScriptGeneratorModalProps> = ({
         </div>
 
         {/* Form Body */}
-        <div className="p-5 flex flex-col gap-4">
+        <div className="p-5 flex flex-col gap-4 overflow-y-auto max-h-[calc(90vh-140px)] custom-scrollbar">
           {/* Idea text */}
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-slate-300">
@@ -98,6 +99,15 @@ export const ScriptGeneratorModal: React.FC<ScriptGeneratorModalProps> = ({
               onChange={(e) => setIdea(e.target.value)}
               className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-sky-500"
               placeholder="Ex: Comercial de um relógio inteligente no espaço, com astronautas e nebulosas brilhantes..."
+            />
+          </div>
+
+          {/* Style Selector Grid with Visual Thumbnails */}
+          <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800/80">
+            <StyleSelectorGrid
+              selectedStyle={style}
+              onSelectStyle={setStyle}
+              showCategoryFilters={true}
             />
           </div>
 

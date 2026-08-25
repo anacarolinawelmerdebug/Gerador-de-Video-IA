@@ -26,7 +26,20 @@ import { PresetsModal } from './components/PresetsModal';
 import { ScriptGeneratorModal } from './components/ScriptGeneratorModal';
 import { ExportModal } from './components/ExportModal';
 import { CloudProjectsModal } from './components/CloudProjectsModal';
-import { CameraMotion, PresetTemplate, Scene, VideoProject, VideoStyle, UserProfile } from './types';
+import { HomeMenu } from './components/HomeMenu';
+import { MyGallery } from './components/MyGallery';
+import { InspirationGallery } from './components/InspirationGallery';
+import { NewProjectModal } from './components/NewProjectModal';
+import {
+  CameraMotion,
+  PresetTemplate,
+  Scene,
+  VideoProject,
+  VideoStyle,
+  UserProfile,
+  NavigationView,
+  InspirationItem,
+} from './types';
 import { PRESET_TEMPLATES } from './data/presets';
 import { generateKeyframeAPI } from './services/geminiService';
 import {
@@ -106,10 +119,12 @@ export default function App() {
   });
 
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [currentView, setCurrentView] = useState<NavigationView>('home');
 
   const [user, setUser] = useState<UserProfile | null>(null);
   const [cloudProjects, setCloudProjects] = useState<VideoProject[]>([]);
   const [isCloudModalOpen, setIsCloudModalOpen] = useState<boolean>(false);
+  const [isNewProjectOpen, setIsNewProjectOpen] = useState<boolean>(false);
   const [isLoadingCloud, setIsLoadingCloud] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
@@ -235,11 +250,16 @@ export default function App() {
     }
   };
 
-  // Load project from cloud
-  const handleSelectCloudProject = (selectedProject: VideoProject) => {
+  // Load project from cloud / gallery
+  const handleSelectProject = (selectedProject: VideoProject) => {
     setProject(selectedProject);
     setActiveSceneIndex(0);
-    showToast(`Projeto "${selectedProject.title}" carregado da nuvem!`);
+    showToast(`Projeto "${selectedProject.title}" carregado!`);
+  };
+
+  const handleSelectCloudProject = (selectedProject: VideoProject) => {
+    handleSelectProject(selectedProject);
+    setIsCloudModalOpen(false);
   };
 
   // Delete project from cloud
@@ -255,39 +275,106 @@ export default function App() {
     }
   };
 
-  // New Blank Project
-  const handleNewProject = () => {
-    const newProj: VideoProject = {
+  // Duplicate a project
+  const handleDuplicateProject = (proj: VideoProject) => {
+    const duplicated: VideoProject = {
+      ...proj,
       id: 'proj_' + Date.now(),
-      title: 'Novo Projeto CineAI',
-      description: 'Projeto de vídeo gerado com inteligência artificial.',
-      aspectRatio: '16:9',
-      style: 'cinematic',
+      title: `${proj.title} (Cópia)`,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      scenes: proj.scenes.map((s, idx) => ({
+        ...s,
+        id: 'sc_' + Date.now() + '_' + idx,
+      })),
+    };
+    setProject(duplicated);
+    setActiveSceneIndex(0);
+    setCurrentView('studio');
+    showToast(`Cópia criada: "${duplicated.title}"!`);
+
+    if (user?.uid) {
+      saveProjectToFirestore(user.uid, duplicated).then(() => {
+        fetchCloudProjects(user.uid);
+      });
+    }
+  };
+
+  // Create project from NewProjectModal
+  const handleCreateProjectFromModal = (
+    newProj: VideoProject,
+    startMode: 'scratch' | 'ai_script' | 'from_template' | 'realistic'
+  ) => {
+    setProject(newProj);
+    setActiveSceneIndex(0);
+    setIsNewProjectOpen(false);
+
+    if (startMode === 'ai_script') {
+      setCurrentView('studio');
+      setIsScriptGenOpen(true);
+    } else if (startMode === 'from_template') {
+      setIsPresetsOpen(true);
+      setCurrentView('studio');
+    } else {
+      setCurrentView('studio');
+      setActiveTab('prompt');
+    }
+
+    showToast(`Novo projeto "${newProj.title}" iniciado!`);
+
+    if (user?.uid) {
+      saveProjectToFirestore(user.uid, newProj).then(() => {
+        fetchCloudProjects(user.uid);
+      });
+    }
+  };
+
+  // Remix an Inspiration Item into active project
+  const handleRemixInspiration = (item: InspirationItem) => {
+    const remixedProject: VideoProject = {
+      id: 'proj_' + Date.now(),
+      title: `Remix: ${item.title}`,
+      description: item.description,
+      aspectRatio: item.aspectRatio,
+      style: item.style,
       fps: 30,
       resolution: '1080p',
-      soundtrack: 'cinematic_epic',
+      soundtrack: item.soundtrack || 'cinematic_epic',
       enableVoiceover: true,
       voiceGender: 'pt-BR-female',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      scenes: [
-        {
-          id: 'sc_' + Date.now(),
-          title: 'Primeiro Take',
-          duration: 4,
-          visualPrompt: 'Cena cinematográfica com iluminação dramática e riqueza de detalhes.',
-          cameraMotion: 'pan_left',
-          atmosphereEffect: 'particles',
-          transition: 'crossfade',
-          narration: 'Apresentando a nova visão cinematográfica.',
-          subtitle: 'INÍCIO DO FILME',
-          moodColor: '#0b112c',
-        },
-      ],
+      scenes: item.scenes.map((s, idx) => ({
+        id: 'sc_' + Date.now() + '_' + idx,
+        title: s.title,
+        duration: s.duration,
+        visualPrompt: s.visualPrompt,
+        cameraMotion: s.cameraMotion,
+        atmosphereEffect: s.atmosphereEffect || 'particles',
+        transition: s.transition || 'crossfade',
+        narration: s.narration || '',
+        subtitle: s.subtitle || '',
+        imageUrl: s.imageUrl,
+        moodColor: '#0b112c',
+      })),
     };
-    setProject(newProj);
+
+    setProject(remixedProject);
     setActiveSceneIndex(0);
-    showToast('Novo projeto criado!');
+    setCurrentView('studio');
+    setActiveTab('prompt');
+    showToast(`Inspiração "${item.title}" carregada no Estúdio!`);
+
+    if (user?.uid) {
+      saveProjectToFirestore(user.uid, remixedProject).then(() => {
+        fetchCloudProjects(user.uid);
+      });
+    }
+  };
+
+  // New Blank Project
+  const handleNewProject = () => {
+    setIsNewProjectOpen(true);
   };
 
   // Update Project state
@@ -410,6 +497,14 @@ export default function App() {
     showToast('Take de foto animada adicionado ao projeto!');
   };
 
+  // Navigate to Studio with specific active tab
+  const handleNavigateToStudio = (tab?: 'prompt' | 'script' | 'music' | 'voice' | 'image_to_video') => {
+    if (tab) {
+      setActiveTab(tab);
+    }
+    setCurrentView('studio');
+  };
+
   return (
     <div className={`min-h-screen flex flex-col font-sans transition-colors ${
       theme === 'light'
@@ -424,6 +519,7 @@ export default function App() {
         onOpenExport={() => setIsExportOpen(true)}
         onOpenScriptGenerator={() => setIsScriptGenOpen(true)}
         onOpenCloudProjects={() => setIsCloudModalOpen(true)}
+        onOpenNewProject={() => setIsNewProjectOpen(true)}
         isExporting={false}
         theme={theme}
         onToggleTheme={toggleTheme}
@@ -431,10 +527,66 @@ export default function App() {
         onSignIn={handleSignIn}
         onSignOut={handleSignOut}
         isSyncing={isSyncing}
+        currentView={currentView}
+        onSelectView={setCurrentView}
       />
 
-      {/* Main Studio Workspace */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      {/* Main View: Início / Minha Galeria / Galeria de Inspiração / Estúdio */}
+      {currentView === 'home' && (
+        <main className="flex-1">
+          <HomeMenu
+            currentProject={project}
+            cloudProjects={cloudProjects}
+            user={user}
+            theme={theme}
+            onNavigateToStudio={handleNavigateToStudio}
+            onNavigateToGallery={() => setCurrentView('my_gallery')}
+            onNavigateToInspiration={() => setCurrentView('inspiration')}
+            onOpenScriptGenerator={() => setIsScriptGenOpen(true)}
+            onOpenPresets={() => setIsPresetsOpen(true)}
+            onOpenCloudProjects={() => setIsCloudModalOpen(true)}
+            onOpenExport={() => setIsExportOpen(true)}
+            onSelectPreset={handleSelectPreset}
+            onSelectStyle={(style) => handleUpdateProject({ style })}
+            onNewProject={handleNewProject}
+            onSignIn={handleSignIn}
+          />
+        </main>
+      )}
+
+      {currentView === 'my_gallery' && (
+        <main className="flex-1 max-w-7xl w-full mx-auto p-4 lg:p-6 animate-in fade-in duration-200">
+          <MyGallery
+            currentProject={project}
+            cloudProjects={cloudProjects}
+            onSelectProject={(proj) => {
+              handleSelectProject(proj);
+            }}
+            onNewProject={() => setIsNewProjectOpen(true)}
+            onDuplicateProject={handleDuplicateProject}
+            onDeleteProject={handleDeleteCloudProject}
+            onOpenExport={() => setIsExportOpen(true)}
+            onNavigateToStudio={(tab) => handleNavigateToStudio(tab)}
+            onNavigateToInspiration={() => setCurrentView('inspiration')}
+            user={user}
+            onSignIn={handleSignIn}
+            theme={theme}
+          />
+        </main>
+      )}
+
+      {currentView === 'inspiration' && (
+        <main className="flex-1 max-w-7xl w-full mx-auto p-4 lg:p-6 animate-in fade-in duration-200">
+          <InspirationGallery
+            onRemixInspiration={handleRemixInspiration}
+            onNavigateToStudio={(tab) => handleNavigateToStudio(tab)}
+            theme={theme}
+          />
+        </main>
+      )}
+
+      {currentView === 'studio' && (
+        <main className="flex-1 max-w-7xl w-full mx-auto p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start animate-in fade-in duration-200">
         {/* Left Column: Live Canvas Video Player & Timeline (5 cols on lg) */}
         <div className="lg:col-span-5 flex flex-col gap-4 sticky lg:top-20">
           <VideoPlayer
@@ -443,6 +595,8 @@ export default function App() {
             onSelectScene={setActiveSceneIndex}
             onGenerateSceneImage={handleGenerateSceneImage}
             isGeneratingImage={isGeneratingImage}
+            onUpdateProject={handleUpdateProject}
+            theme={theme}
           />
         </div>
 
@@ -578,6 +732,7 @@ export default function App() {
           )}
         </div>
       </main>
+      )}
 
       {/* Floating Toast Notification */}
       {toastMessage && (
@@ -600,6 +755,16 @@ export default function App() {
         onDeleteProject={handleDeleteCloudProject}
         onNewProject={handleNewProject}
         onSignIn={handleSignIn}
+      />
+
+      {/* New Project Creator Modal */}
+      <NewProjectModal
+        isOpen={isNewProjectOpen}
+        onClose={() => setIsNewProjectOpen(false)}
+        onCreateProject={handleCreateProjectFromModal}
+        currentStyle={project.style}
+        currentAspectRatio={project.aspectRatio}
+        theme={theme}
       />
 
       {/* Modals */}

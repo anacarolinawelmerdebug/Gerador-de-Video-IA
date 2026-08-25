@@ -49,10 +49,11 @@ export const CloudProjectsModal: React.FC<CloudProjectsModalProps> = ({
 
   if (!isOpen) return null;
 
-  const filteredProjects = cloudProjects.filter(
+  const filteredProjects = (cloudProjects || []).filter(
     (p) =>
-      p.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.style.toLowerCase().includes(searchTerm.toLowerCase())
+      p &&
+      ((p.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (p.style || '').toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const handleSaveCurrent = async () => {
@@ -210,8 +211,8 @@ export const CloudProjectsModal: React.FC<CloudProjectsModalProps> = ({
                 </div>
               ) : (
                 filteredProjects.map((p) => {
-                  const isCurrent = p.id === currentProject.id;
-                  const totalSec = p.scenes.reduce((acc, s) => acc + s.duration, 0);
+                  const isCurrent = currentProject && p.id === currentProject.id;
+                  const totalSec = (p.scenes || []).reduce((acc, s) => acc + (s?.duration || 0), 0);
 
                   return (
                     <div

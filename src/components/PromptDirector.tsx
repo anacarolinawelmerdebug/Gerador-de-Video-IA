@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { CameraMotion, EnhancedPromptResult, VideoProject, VideoStyle } from '../types';
 import { enhancePromptAPI } from '../services/geminiService';
+import { StyleSelectorGrid } from './StyleSelectorGrid';
 
 interface PromptDirectorProps {
   project: VideoProject;
@@ -22,6 +23,7 @@ interface PromptDirectorProps {
 }
 
 const STYLE_OPTIONS: { id: VideoStyle; name: string; desc: string; icon: string }[] = [
+  { id: 'photorealistic', name: 'Realista / Fotorrealista 8K', desc: 'Texturas hiper-realistas, iluminação física e máxima fidelidade', icon: '📸' },
   { id: 'cinematic', name: 'Cinematográfico 4K', desc: 'Iluminação de cinema, profundidade de campo rasa', icon: '🎬' },
   { id: 'cyberpunk', name: 'Cyberpunk Neon', desc: 'Metrópole noturna, hologramas e chuva magenta', icon: '🏙️' },
   { id: 'anime', name: 'Anime Ghibli', desc: 'Arte pintada à mão, cores vívidas e fantasia', icon: '🌸' },
@@ -217,40 +219,14 @@ export const PromptDirector: React.FC<PromptDirectorProps> = ({
         </div>
       )}
 
-      {/* Visual Styles Selector */}
-      <div className="flex flex-col gap-2">
-        <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-          <Palette className="w-3.5 h-3.5 text-sky-400" />
-          <span>Estilo Visual & Estética</span>
-        </label>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-          {STYLE_OPTIONS.map((style) => {
-            const isSelected = selectedStyle === style.id;
-            return (
-              <button
-                key={style.id}
-                id={`style-btn-${style.id}`}
-                onClick={() => {
-                  setSelectedStyle(style.id);
-                  onUpdateProject({ style: style.id });
-                }}
-                className={`p-3 rounded-xl text-left border transition-all flex flex-col gap-1 relative overflow-hidden ${
-                  isSelected
-                    ? 'bg-sky-500/15 border-sky-500 text-white shadow-md shadow-sky-500/10'
-                    : 'bg-slate-950/60 border-slate-800/80 text-slate-400 hover:text-slate-200 hover:border-slate-700'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-base">{style.icon}</span>
-                  {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-sky-400" />}
-                </div>
-                <span className="text-xs font-bold text-slate-200 mt-1">{style.name}</span>
-                <span className="text-[10px] text-slate-500 line-clamp-1">{style.desc}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      {/* Visual Styles Selector with Visual Thumbnails Grid */}
+      <StyleSelectorGrid
+        selectedStyle={selectedStyle}
+        onSelectStyle={(style) => {
+          setSelectedStyle(style);
+          onUpdateProject({ style });
+        }}
+      />
 
       {/* Camera Motion Selector */}
       <div className="flex flex-col gap-2">

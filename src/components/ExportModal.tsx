@@ -305,6 +305,26 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             )}
           </div>
 
+          {/* Post-Processing Filters Status Notice */}
+          {project.postProcessing?.enabled && (
+            <div className="p-3 rounded-lg bg-sky-500/10 border border-sky-500/20 text-xs flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sky-300">
+                <Sparkles className="w-4 h-4 text-sky-400 shrink-0" />
+                <span>
+                  <strong>Efeitos IA Inclusos:</strong> LUT{' '}
+                  <span className="capitalize">{project.postProcessing.colorGrading.replace('_', ' ')}</span>
+                  {project.postProcessing.filmGrain > 0 && ` · ${project.postProcessing.filmGrain}% Grão`}
+                  {project.postProcessing.chromaticAberration > 0 && ` · Aberração RGB`}
+                  {project.postProcessing.bloomGlow > 0 && ` · Black Pro-Mist`}
+                  {project.postProcessing.vignette > 0 && ` · Vinheta`}
+                </span>
+              </div>
+              <span className="text-[10px] uppercase font-bold text-sky-400 bg-sky-500/20 px-2 py-0.5 rounded">
+                Ativo
+              </span>
+            </div>
+          )}
+
           {/* Progress Bar during export */}
           {isExporting && (
             <div className="bg-slate-950 p-4 rounded-xl border border-sky-500/30 flex flex-col gap-2">
